@@ -149,6 +149,11 @@ namespace triqs_ctseg {
     /// Whether to measure \f$ \langle S_x(\tau) S_x(0) \rangle \f$.
     bool measure_Sperp_tau = false;
 
+    /// Whether to measure oriented transverse spin correlations
+    /// \f$ \langle S^-(\tau) S^+(0) \rangle \f$ and
+    /// \f$ \langle S^+(\tau) S^-(0) \rangle \f$.
+    bool measure_Sperp_asym_tau = false;
+
     /// Whether to measure the occupation-basis state histogram.
     bool measure_state_hist = false;
 

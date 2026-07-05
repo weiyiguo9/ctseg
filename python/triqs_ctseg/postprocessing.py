@@ -301,6 +301,17 @@ def _spin_color_indices(gf_struct):
     return up[0], down[0]
 
 
+def _h_loc0_color_matrix(solver):
+    block_name, _, _ = build_color_tables(solver.gf_struct)
+    h_loc0_color = np.zeros((len(block_name), len(block_name)), dtype=complex)
+    offset = 0
+    for h_block in solver.h_loc0_mat:
+        dim = h_block.shape[0]
+        h_loc0_color[offset:offset + dim, offset:offset + dim] = h_block
+        offset += dim
+    return h_loc0_color
+
+
 def _is_unpolarized_single_orbital(solver, up, down, tol=1e-12):
     block_name, _, _ = build_color_tables(solver.gf_struct)
     if len(block_name) != 2:
@@ -361,49 +372,122 @@ def _jperp_sigma1_components_from_tau(jperp_tau, chi_xx_tau, beta, U):
     }
 
 
-def _chi_xx_tau_from_solver(solver, up, down):
-    nn_tau = getattr(solver.results, 'nn_tau', None)
-    if nn_tau is not None:
-        block_name, index_in_block, _ = build_color_tables(solver.gf_struct)
-        nn_color = _assemble_color_gf(nn_tau, block_name, index_in_block)
-        chi_up_up = nn_color.data[:, up, up].real
-        chi_down_down = nn_color.data[:, down, down].real
-        chi_cross = 0.5 * (nn_color.data[:, up, down].real + nn_color.data[:, down, up].real)
-        return 0.25 * (chi_up_up + chi_down_down - 2.0 * chi_cross)
+def _jperp_sigma1_oriented_components_from_tau(
+    jperp_tau,
+    chi_minus_plus_tau,
+    chi_plus_minus_tau,
+    beta,
+    U,
+):
+    jperp_tau = np.asarray(jperp_tau, dtype=float)
+    chi_minus_plus_tau = np.asarray(chi_minus_plus_tau, dtype=float)
+    chi_plus_minus_tau = np.asarray(chi_plus_minus_tau, dtype=float)
+    if jperp_tau.shape != chi_minus_plus_tau.shape or jperp_tau.shape != chi_plus_minus_tau.shape:
+        raise ValueError("Jperp_tau and oriented transverse-spin correlators must have the same tau mesh.")
 
+    j_tau0 = 0.5 * (jperp_tau[0] + jperp_tau[-1])
+
+    def one_orientation(chi_tau):
+        j_chi = _trapezoid_uniform(jperp_tau * chi_tau, beta)
+        j_chi_j = _periodic_tau_convolution_zero(jperp_tau, chi_tau, jperp_tau, beta)
+        pure = 0.25 * (2.0 * j_tau0 + j_chi_j)
+        mixed = -U * j_chi
+        return {
+            'pure': pure,
+            'mixed': mixed,
+            'total': pure + mixed,
+            'int_J_chi': j_chi,
+            'J_chi_J': j_chi_j,
+            'J_tau0': j_tau0,
+        }
+
+    up = one_orientation(chi_minus_plus_tau)
+    down = one_orientation(chi_plus_minus_tau)
+    return {
+        'mode': 'oriented',
+        'up': up,
+        'down': down,
+        'Sminus_Splus': up,
+        'Splus_Sminus': down,
+        'total_up': up['total'],
+        'total_down': down['total'],
+        'J_tau0': j_tau0,
+    }
+
+
+def _chi_xx_tau_from_solver(solver, up, down):
     sperp_tau = getattr(solver.results, 'Sperp_tau', None)
     if sperp_tau is not None:
         return np.asarray(sperp_tau.data[:, 0, 0].real)
 
+    # A spin-unpolarized one-body Hamiltonian does not prove spin-rotational
+    # invariance: anisotropic interactions can make chi_zz != chi_xx.  Without
+    # a measured transverse correlator there is no safe reconstruction here.
     return None
+
+
+def _oriented_sperp_tau_from_solver(solver):
+    sm_sp_tau = getattr(solver.results, 'Sminus_Splus_tau', None)
+    sp_sm_tau = getattr(solver.results, 'Splus_Sminus_tau', None)
+    if sm_sp_tau is None or sp_sm_tau is None:
+        return None
+    return (
+        np.asarray(sm_sp_tau.data[:, 0, 0].real),
+        np.asarray(sp_sm_tau.data[:, 0, 0].real),
+    )
 
 
 def _assemble_jperp_sigma1(solver, U):
     spin_colors = _spin_color_indices(solver.gf_struct)
     if spin_colors is None:
-        mpi.report("WARNING: Jperp moments require a single up/down orbital; "
+        mpi.report("WARNING: Jperp tail moments require a single up/down orbital; "
                    "skipping analytic transverse Sigma_1/F_2.")
         return None
 
     up, down = spin_colors
-    if not _is_unpolarized_single_orbital(solver, up, down):
-        mpi.report("WARNING: spin-polarized Jperp moments require asymmetric transverse-spin measures; "
+    is_unpolarized = _is_unpolarized_single_orbital(solver, up, down)
+
+    jperp_tau = np.asarray(solver.Jperp_tau.data[:, 0, 0].real)
+    U_spin = 0.5 * (U[up, down] + U[down, up])
+
+    oriented_tau = _oriented_sperp_tau_from_solver(solver)
+    if oriented_tau is not None:
+        chi_minus_plus_tau, chi_plus_minus_tau = oriented_tau
+        if jperp_tau.shape == chi_minus_plus_tau.shape and jperp_tau.shape == chi_plus_minus_tau.shape:
+            components = _jperp_sigma1_oriented_components_from_tau(
+                jperp_tau,
+                chi_minus_plus_tau,
+                chi_plus_minus_tau,
+                solver.Jperp_tau.mesh.beta,
+                U_spin,
+            )
+
+            correction = np.zeros(U.shape[0], dtype=float)
+            correction[up] = components['up']['total']
+            correction[down] = components['down']['total']
+            return correction, components
+
+        mpi.report("WARNING: Jperp_tau and asymmetric transverse-spin tau meshes differ; "
+                   "skipping asymmetric transverse Sigma_1/F_2.")
+        if not is_unpolarized:
+            return None
+
+    if not is_unpolarized:
+        mpi.report("WARNING: spin-polarized Jperp moments require Sminus_Splus_tau and Splus_Sminus_tau; "
                    "skipping analytic transverse Sigma_1/F_2.")
         return None
 
     chi_xx_tau = _chi_xx_tau_from_solver(solver, up, down)
     if chi_xx_tau is None:
-        mpi.report("WARNING: Jperp moments require nn_tau or Sperp_tau; "
+        mpi.report("WARNING: Jperp tail moments require Sperp_tau; "
                    "skipping analytic transverse Sigma_1/F_2.")
         return None
 
-    jperp_tau = np.asarray(solver.Jperp_tau.data[:, 0, 0].real)
     if jperp_tau.shape != chi_xx_tau.shape:
         mpi.report("WARNING: Jperp_tau and chi_xx_tau tau meshes differ; "
                    "skipping analytic transverse Sigma_1/F_2.")
         return None
 
-    U_spin = 0.5 * (U[up, down] + U[down, up])
     components = _jperp_sigma1_components_from_tau(
         jperp_tau, chi_xx_tau, solver.Jperp_tau.mesh.beta, U_spin
     )
@@ -412,17 +496,6 @@ def _assemble_jperp_sigma1(solver, U):
     correction[up] = components['total']
     correction[down] = components['total']
     return correction, components
-
-
-def _h_loc0_color_matrix(solver):
-    block_name, _, _ = build_color_tables(solver.gf_struct)
-    h_loc0_color = np.zeros((len(block_name), len(block_name)), dtype=complex)
-    offset = 0
-    for h_block in solver.h_loc0_mat:
-        dim = h_block.shape[0]
-        h_loc0_color[offset:offset + dim, offset:offset + dim] = h_block
-        offset += dim
-    return h_loc0_color
 
 
 def _assemble_density_tail_moments(solver, use_tail_moments=True):
