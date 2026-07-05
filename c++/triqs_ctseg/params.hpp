@@ -149,8 +149,11 @@ namespace triqs_ctseg {
     /// Whether to measure \f$ \langle S_x(\tau) S_x(0) \rangle \f$.
     bool measure_Sperp_tau = false;
 
-    /// Whether to measure state histograms.
+    /// Whether to measure the occupation-basis state histogram.
     bool measure_state_hist = false;
+
+    /// Whether to measure retarded static correlations for tail moments.
+    bool measure_dyn_corr = false;
 
     /// Whether to measure three-point correlation function.
     bool measure_g2w = false;

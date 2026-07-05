@@ -9,13 +9,19 @@ No Monte Carlo; these tests pin down data-transformation contracts that
 are otherwise only exercised indirectly via solve_generic.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import triqs.utility.mpi as mpi
+from triqs.gfs import MeshImTime, Gf, Block2Gf
 from triqs.operators import n
 
 from triqs_ctseg.postprocessing import (
     build_color_tables,
     _dd_to_4idx,
+    _density_observables_from_state_hist,
+    _assemble_density_tail_moments,
+    compute_sigma_first_moment,
     extract_u_tensor_from_h_int,
     check_spectrum,
 )
@@ -160,6 +166,228 @@ def test_check_spectrum_rejects_non_square():
     raise AssertionError("check_spectrum should have raised for non-square input")
 
 
+def test_state_hist_observables_and_static_moments():
+    class Results:
+        state_hist = np.array([0.1, 0.2, 0.3, 0.4])
+        densities = None
+        nn_static = None
+
+    class Solver:
+        gf_struct = [('up', 1), ('down', 1)]
+        results = Results()
+        h_int = 2.0 * n('up', 0) * n('down', 0)
+        h_loc0_mat = [np.array([[0.25]]), np.array([[-0.5]])]
+        D0_tau = None
+
+    n_avg, nn_avg = _density_observables_from_state_hist(Solver)
+    np.testing.assert_allclose(n_avg, [0.6, 0.7])
+    np.testing.assert_allclose(nn_avg, [[0.6, 0.4], [0.4, 0.7]])
+
+    moments = _assemble_density_tail_moments(Solver)
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][0], [[1.4]])
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][0], [[1.2]])
+    # Sigma_1^up = U^2 Var(n_down), Sigma_1^down = U^2 Var(n_up)
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][1], [[4.0 * 0.7 * 0.3]])
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][1], [[4.0 * 0.6 * 0.4]])
+    np.testing.assert_allclose(moments['G_moments']['up'][2], [[1.65]])
+    np.testing.assert_allclose(moments['G_moments']['down'][2], [[0.7]])
+    np.testing.assert_allclose(
+        moments['F_tail_moments']['up'][2],
+        [[1.4 * 1.65 + 4.0 * 0.7 * 0.3]],
+    )
+
+
+def _fock_annihilators(n_color):
+    """Jordan-Wigner annihilators on the Fock space with state index sum_c n_c 2^c."""
+    dim = 2**n_color
+    cs = []
+    for a in range(n_color):
+        c = np.zeros((dim, dim))
+        for state in range(dim):
+            if state >> a & 1:
+                sign = (-1)**bin(state & ((1 << a) - 1)).count('1')
+                c[state ^ (1 << a), state] = sign
+        cs.append(c)
+    return cs
+
+
+def test_compute_sigma_first_moment_vs_operator_algebra():
+    # Kanamori density-density, 2 orbitals, one 2x2 block per spin.
+    # Reference: Sigma_0 = -<{[H,c],c+}>, Sigma_1 = <{[H,[H,c]],c+}> - Sigma_0^2
+    # evaluated in Fock space for a random diagonal density matrix.
+    U, Up, J = 4.0, 2.0, 0.5
+    gf_struct = [('up', 2), ('down', 2)]
+    h_int = (
+        U * (n('up', 0) * n('down', 0) + n('up', 1) * n('down', 1))
+        + Up * (n('up', 0) * n('down', 1) + n('up', 1) * n('down', 0))
+        + (Up - J) * (n('up', 0) * n('up', 1) + n('down', 0) * n('down', 1))
+    )
+    # colors [up0, up1, down0, down1]
+    U_dd = np.array([
+        [0.,     Up - J, U,      Up],
+        [Up - J, 0.,     Up,     U],
+        [U,      Up,     0.,     Up - J],
+        [Up,     U,      Up - J, 0.],
+    ])
+    n_color = 4
+
+    rng = np.random.default_rng(42)
+    prob = rng.random(2**n_color)
+    prob /= prob.sum()
+
+    cs = _fock_annihilators(n_color)
+    ns = [c.T @ c for c in cs]
+    H = 0.5 * sum(U_dd[a, b] * ns[a] @ ns[b] for a in range(n_color) for b in range(n_color))
+    rho = np.diag(prob)
+
+    def comm(A, B):
+        return A @ B - B @ A
+
+    def anticomm(A, B):
+        return A @ B + B @ A
+
+    sigma0_ref = np.array([-np.trace(rho @ anticomm(comm(H, c), c.T)) for c in cs])
+    sigma1_ref = np.array([
+        np.trace(rho @ anticomm(comm(H, comm(H, c)), c.T)) for c in cs
+    ]) - sigma0_ref**2
+
+    # Minimal stand-in for the solver; zero D0(tau) / Jperp(tau) mean a static interaction.
+    solver = SimpleNamespace(
+        gf_struct=gf_struct, h_int=h_int,
+        results=SimpleNamespace(state_hist=prob),
+        D0_tau=_constant_d0_tau(gf_struct, beta=2.0, n_tau=3, d0_w0=0.0),
+        Jperp_tau=SimpleNamespace(data=np.zeros((3, 1, 1))),
+    )
+
+    sigma1 = compute_sigma_first_moment(solver)
+    assert list(sigma1) == ['up', 'down']
+    for blk in sigma1.values():
+        assert blk.shape == (2, 2)
+        np.testing.assert_allclose(blk - np.diag(np.diag(blk)), 0.)
+    np.testing.assert_allclose(
+        np.concatenate([np.diag(sigma1['up']), np.diag(sigma1['down'])]),
+        sigma1_ref,
+        rtol=1e-12,
+    )
+
+    # No state histogram -> moment unknown.
+    solver.results.state_hist = None
+    assert compute_sigma_first_moment(solver) is None
+
+    # Retarded interaction -> moment unknown.
+    solver.results.state_hist = prob
+    solver.Jperp_tau.data[1] = 0.1
+    assert compute_sigma_first_moment(solver) is None
+
+
+def _half_filled_hubbard_atom_hist(beta, U):
+    boltzmann_single = np.exp(beta * U / 2.0)
+    z_part = 2.0 + 2.0 * boltzmann_single
+    return np.array([
+        1.0 / z_part,
+        boltzmann_single / z_part,
+        boltzmann_single / z_part,
+        1.0 / z_part,
+    ])
+
+
+def _constant_d0_tau(gf_struct, beta, n_tau, d0_w0):
+    block_names = [name for name, _ in gf_struct]
+    mesh = MeshImTime(beta=beta, statistic='Boson', n_tau=n_tau)
+    blocks = [[Gf(mesh=mesh, target_shape=(1, 1)) for _ in block_names] for _ in block_names]
+    out = Block2Gf(block_names, block_names, blocks, make_copies=False)
+    for left, right in out.indices:
+        out[left, right].data[:, 0, 0] = d0_w0 / beta
+    return out
+
+
+def test_hubbard_atom_static_tail_moments_at_half_filling():
+    beta = 7.0
+    U = 3.0
+    mu = U / 2.0
+
+    class Results:
+        state_hist = _half_filled_hubbard_atom_hist(beta, U)
+        densities = None
+        nn_static = None
+
+    class Solver:
+        gf_struct = [('up', 1), ('down', 1)]
+        results = Results()
+        h_int = U * n('up', 0) * n('down', 0)
+        h_loc0_mat = [np.array([[-mu]]), np.array([[-mu]])]
+        D0_tau = None
+
+    moments = _assemble_density_tail_moments(Solver)
+
+    # Half-filled Hubbard atom: <n_up> = <n_down> = 1/2, so
+    # Sigma_0 = U/2 and Sigma_1 = U^2 Var(n_opposite) = U^2/4.
+    np.testing.assert_allclose(moments['Sigma_HartreeFock']['up'], [[U / 2.0]])
+    np.testing.assert_allclose(moments['Sigma_HartreeFock']['down'], [[U / 2.0]])
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][0], [[U / 2.0]])
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][0], [[U / 2.0]])
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][1], [[U ** 2 / 4.0]])
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][1], [[U ** 2 / 4.0]])
+    np.testing.assert_allclose(moments['G_moments']['up'][2], [[0.0]], atol=1e-14)
+    np.testing.assert_allclose(moments['G_moments']['down'][2], [[0.0]], atol=1e-14)
+    np.testing.assert_allclose(moments['F_tail_moments']['up'][2], [[U ** 2 / 4.0]])
+    np.testing.assert_allclose(moments['F_tail_moments']['down'][2], [[U ** 2 / 4.0]])
+
+
+def test_hubbard_atom_dynamic_density_tail_moments_at_half_filling():
+    beta = 7.0
+    U = 3.0
+    mu = U / 2.0
+    d0_w0 = 0.4
+    gf_struct = [('up', 1), ('down', 1)]
+    state_hist = _half_filled_hubbard_atom_hist(beta, U)
+
+    states = np.arange(state_hist.size, dtype=np.int64)
+    occ = ((states[:, None] >> np.arange(2)) & 1).astype(float)
+    n_total = np.sum(occ, axis=1)
+    p_double = state_hist[3]
+    phi = d0_w0 * n_total
+    dyn_phi_n = np.vstack([
+        state_hist @ (phi * occ[:, 0]),
+        state_hist @ (phi * occ[:, 1]),
+    ])
+    dyn_phi_phi = np.full((2, 2), state_hist @ (phi * phi))
+
+    Results = type('Results', (), {
+        'state_hist': state_hist,
+        'densities': None,
+        'nn_static': None,
+        'dyn_phi_n': dyn_phi_n,
+        'dyn_phi_phi': dyn_phi_phi,
+    })
+    Solver = type('Solver', (), {
+        'gf_struct': gf_struct,
+        'results': Results(),
+        'h_int': U * n('up', 0) * n('down', 0),
+        'h_loc0_mat': [np.array([[-mu]]), np.array([[-mu]])],
+        'D0_tau': _constant_d0_tau(gf_struct, beta, n_tau=101, d0_w0=d0_w0),
+    })
+
+    moments = _assemble_density_tail_moments(Solver)
+
+    sigma0 = U / 2.0 + d0_w0
+    cov_phi_n = d0_w0 * p_double
+    var_phi = 2.0 * d0_w0 ** 2 * p_double - d0_w0 / beta
+    sigma1 = U ** 2 / 4.0 + 2.0 * U * cov_phi_n + var_phi
+    g2 = d0_w0
+
+    np.testing.assert_allclose(moments['Sigma_HartreeFock']['up'], [[sigma0]], atol=1e-13)
+    np.testing.assert_allclose(moments['Sigma_HartreeFock']['down'], [[sigma0]], atol=1e-13)
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][0], [[sigma0]], atol=1e-13)
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][0], [[sigma0]], atol=1e-13)
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][1], [[sigma1]], atol=1e-13)
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][1], [[sigma1]], atol=1e-13)
+    np.testing.assert_allclose(moments['G_moments']['up'][2], [[g2]], atol=1e-13)
+    np.testing.assert_allclose(moments['G_moments']['down'][2], [[g2]], atol=1e-13)
+    np.testing.assert_allclose(moments['F_tail_moments']['up'][2], [[sigma0 * g2 + sigma1]], atol=1e-13)
+    np.testing.assert_allclose(moments['F_tail_moments']['down'][2], [[sigma0 * g2 + sigma1]], atol=1e-13)
+
+
 if mpi.is_master_node():
     test_build_color_tables_single_orbital()
     test_build_color_tables_two_orbital_single_block_per_spin()
@@ -171,4 +399,8 @@ if mpi.is_master_node():
     test_check_spectrum_no_truncation_keeps_matrix()
     test_check_spectrum_truncation_drops_large_eigenvalues()
     test_check_spectrum_rejects_non_square()
+    test_compute_sigma_first_moment_vs_operator_algebra()
+    test_state_hist_observables_and_static_moments()
+    test_hubbard_atom_static_tail_moments_at_half_filling()
+    test_hubbard_atom_dynamic_density_tail_moments_at_half_filling()
     print("postprocessing_helpers: all tests passed")

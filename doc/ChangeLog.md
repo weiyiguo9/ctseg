@@ -1,5 +1,12 @@
 # Changelog
 
+## Unstable
+
+### General
+* Weight the state histogram and transverse spin correlation with the Monte-Carlo sign.
+* Keep ``measure_state_hist`` disabled by default and expose the static first-moment helpers.
+* Correct the retarded self-energy moment's equal-time contact sign and source-field measurements.
+
 ## Version 4.0.1
 
 ctseg version 4.0.1 is a patch release that pins the c2py build dependency to

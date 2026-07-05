@@ -118,7 +118,9 @@ namespace triqs_ctseg {
                           "Perturbation order Jperp");
       }
     }
-    if (p.measure_state_hist) CTQMC.add_measure(measures::state_hist{p, wdata, config, results}, "State histograms");
+    if (p.measure_state_hist) CTQMC.add_measure(measures::state_hist{p, wdata, config, results}, "State histogram");
+    if (p.measure_dyn_corr and wdata.has_Dt)
+      CTQMC.add_measure(measures::dyn_corr{p, wdata, config, results}, "Retarded static correlations");
     if (p.measure_g2w || p.measure_g3w) 
       CTQMC.add_measure(measures::four_point{p, wdata, config, results}, "Four-point correlation function");
     if (p.visualize_config) CTQMC.add_measure(measures::visualize_config{config}, "Visualizing configurations");
