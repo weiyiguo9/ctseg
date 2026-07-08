@@ -49,6 +49,7 @@ static int synth_constructor_0(PyObject *self, PyObject *args, PyObject *kwargs)
   de("gf_struct", self_c.gf_struct, false);
   de("n_tau", self_c.n_tau, true);
   de("n_tau_bosonic", self_c.n_tau_bosonic, true);
+  de("n_l", self_c.n_l, true);
   return de.check();
 }
 
@@ -68,10 +69,13 @@ n_tau : {par_2}, default=10001
 
 n_tau_bosonic : {par_3}, default=10001
 
+n_l : {par_4}, default=30
+
 )DOC",
                       "par",
                       {c2py::python_typename<double>(), c2py::python_typename<triqs::gfs::gf_struct_t>(),
-                       c2py::python_typename<int>(), c2py::python_typename<int>()});
+                       c2py::python_typename<int>(), c2py::python_typename<int>(),
+                       c2py::python_typename<int>()});
 
 // ----- Method table ----
 template <>
@@ -84,6 +88,7 @@ constexpr auto _c2py_doc_member_0 = R"DOC(Inverse temperature :math:`\beta`.)DOC
 constexpr auto _c2py_doc_member_1 = R"DOC(Structure of the Green's function (names and sizes of blocks).)DOC";
 constexpr auto _c2py_doc_member_2 = R"DOC(Number of time slices for fermionic functions.)DOC";
 constexpr auto _c2py_doc_member_3 = R"DOC(Number of time slices for bosonic functions.)DOC";
+constexpr auto _c2py_doc_member_constr_n_l = R"DOC(Number of Legendre coefficients for fermionic single-particle functions.)DOC";
 static PyObject *prop_get_dict_0(PyObject *self, void *) {
   auto &self_c = *(((c2py::wrap<_c2py_cls_0> *)self)->_c);
   c2py::pydict dic;
@@ -91,6 +96,7 @@ static PyObject *prop_get_dict_0(PyObject *self, void *) {
   dic["gf_struct"]     = self_c.gf_struct;
   dic["n_tau"]         = self_c.n_tau;
   dic["n_tau_bosonic"] = self_c.n_tau_bosonic;
+  dic["n_l"]           = self_c.n_l;
   return dic.new_ref();
 }
 
@@ -102,6 +108,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_0>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_0::gf_struct, _c2py_cls_0>("gf_struct", _c2py_doc_member_1),
    c2py::getsetdef_from_member<&_c2py_cls_0::n_tau, _c2py_cls_0>("n_tau", _c2py_doc_member_2),
    c2py::getsetdef_from_member<&_c2py_cls_0::n_tau_bosonic, _c2py_cls_0>("n_tau_bosonic", _c2py_doc_member_3),
+   c2py::getsetdef_from_member<&_c2py_cls_0::n_l, _c2py_cls_0>("n_l", _c2py_doc_member_constr_n_l),
    {"__dict__", (getter)prop_get_dict_0, nullptr, "", nullptr},
    {nullptr, nullptr, nullptr, nullptr, nullptr}};
 
@@ -159,6 +166,8 @@ static int synth_constructor_1(PyObject *self, PyObject *args, PyObject *kwargs)
   de("measure_pert_order", self_c.measure_pert_order, true);
   de("measure_G_tau", self_c.measure_G_tau, true);
   de("measure_F_tau", self_c.measure_F_tau, true);
+  de("measure_G_l", self_c.measure_G_l, true);
+  de("measure_F_l", self_c.measure_F_l, true);
   de("measure_densities", self_c.measure_densities, true);
   de("measure_average_sign", self_c.measure_average_sign, true);
   de("measure_nn_static", self_c.measure_nn_static, true);
@@ -385,6 +394,8 @@ constexpr auto _c2py_doc_member_31 =
    R"DOC(Whether to measure the perturbation order histograms (order in Delta and Jperp).)DOC";
 constexpr auto _c2py_doc_member_32 = R"DOC(Whether to measure :math:`G(\tau)`.)DOC";
 constexpr auto _c2py_doc_member_33 = R"DOC(Whether to measure :math:`F(\tau)`.)DOC";
+constexpr auto _c2py_doc_member_measure_G_l = R"DOC(Whether to measure :math:`G_l` in the Legendre representation.)DOC";
+constexpr auto _c2py_doc_member_measure_F_l = R"DOC(Whether to measure :math:`F_l` in the Legendre representation.)DOC";
 constexpr auto _c2py_doc_member_34 = R"DOC(Whether to measure densities.)DOC";
 constexpr auto _c2py_doc_member_35 = R"DOC(Whether to measure the average sign.)DOC";
 constexpr auto _c2py_doc_member_36 = R"DOC(Whether to measure :math:`\langle n(0) n(0) \rangle`.)DOC";
@@ -445,6 +456,8 @@ static PyObject *prop_get_dict_1(PyObject *self, void *) {
   dic["measure_pert_order"]            = self_c.measure_pert_order;
   dic["measure_G_tau"]                 = self_c.measure_G_tau;
   dic["measure_F_tau"]                 = self_c.measure_F_tau;
+  dic["measure_G_l"]                   = self_c.measure_G_l;
+  dic["measure_F_l"]                   = self_c.measure_F_l;
   dic["measure_densities"]             = self_c.measure_densities;
   dic["measure_average_sign"]          = self_c.measure_average_sign;
   dic["measure_nn_static"]             = self_c.measure_nn_static;
@@ -514,6 +527,8 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_1>[] = {
                                                                               _c2py_doc_member_31),
    c2py::getsetdef_from_member<&_c2py_cls_1::measure_G_tau, _c2py_cls_1>("measure_G_tau", _c2py_doc_member_32),
    c2py::getsetdef_from_member<&_c2py_cls_1::measure_F_tau, _c2py_cls_1>("measure_F_tau", _c2py_doc_member_33),
+   c2py::getsetdef_from_member<&_c2py_cls_1::measure_G_l, _c2py_cls_1>("measure_G_l", _c2py_doc_member_measure_G_l),
+   c2py::getsetdef_from_member<&_c2py_cls_1::measure_F_l, _c2py_cls_1>("measure_F_l", _c2py_doc_member_measure_F_l),
    c2py::getsetdef_from_member<&_c2py_cls_1::measure_densities, _c2py_cls_1>("measure_densities", _c2py_doc_member_34),
    c2py::getsetdef_from_member<&_c2py_cls_1::measure_average_sign, _c2py_cls_1>("measure_average_sign",
                                                                                 _c2py_doc_member_35),
@@ -573,6 +588,8 @@ static int synth_constructor_2(PyObject *self, PyObject *args, PyObject *kwargs)
   auto &self_c = *(((c2py::wrap<_c2py_cls_2> *)self)->_c);
   de("G_tau", self_c.G_tau, false);
   de("F_tau", self_c.F_tau, false);
+  de("G_l", self_c.G_l, false);
+  de("F_l", self_c.F_l, false);
   de("nn_tau", self_c.nn_tau, false);
   de("nn_nu_dlr", self_c.nn_nu_dlr, false);
   de("Sperp_tau", self_c.Sperp_tau, false);
@@ -682,6 +699,10 @@ PyMethodDef c2py::tp_methods<_c2py_cls_2>[] = {
 
 constexpr auto _c2py_doc_member_54 = R"DOC(Single-particle Green's function :math:`G(\tau)`.)DOC";
 constexpr auto _c2py_doc_member_55 = R"DOC(Self-energy improved estimator :math:`F(\tau)`.)DOC";
+constexpr auto _c2py_doc_member_results_G_l =
+   R"DOC(Single-particle Green's function :math:`G_l` in the Legendre representation.)DOC";
+constexpr auto _c2py_doc_member_results_F_l =
+   R"DOC(Self-energy improved estimator :math:`F_l` in the Legendre representation.)DOC";
 constexpr auto _c2py_doc_member_56 =
    R"DOC(Density-density time correlation function :math:`\langle n_a(\tau) n_b(0) \rangle`.)DOC";
 constexpr auto _c2py_doc_member_57 =
@@ -710,6 +731,8 @@ static PyObject *prop_get_dict_2(PyObject *self, void *) {
   c2py::pydict dic;
   dic["G_tau"]               = self_c.G_tau;
   dic["F_tau"]               = self_c.F_tau;
+  dic["G_l"]                 = self_c.G_l;
+  dic["F_l"]                 = self_c.F_l;
   dic["nn_tau"]              = self_c.nn_tau;
   dic["nn_nu_dlr"]           = self_c.nn_nu_dlr;
   dic["Sperp_tau"]           = self_c.Sperp_tau;
@@ -736,6 +759,8 @@ template <>
 constinit PyGetSetDef c2py::tp_getset<_c2py_cls_2>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_2::G_tau, _c2py_cls_2>("G_tau", _c2py_doc_member_54),
    c2py::getsetdef_from_member<&_c2py_cls_2::F_tau, _c2py_cls_2>("F_tau", _c2py_doc_member_55),
+   c2py::getsetdef_from_member<&_c2py_cls_2::G_l, _c2py_cls_2>("G_l", _c2py_doc_member_results_G_l),
+   c2py::getsetdef_from_member<&_c2py_cls_2::F_l, _c2py_cls_2>("F_l", _c2py_doc_member_results_F_l),
    c2py::getsetdef_from_member<&_c2py_cls_2::nn_tau, _c2py_cls_2>("nn_tau", _c2py_doc_member_56),
    c2py::getsetdef_from_member<&_c2py_cls_2::nn_nu_dlr, _c2py_cls_2>("nn_nu_dlr", _c2py_doc_member_57),
    c2py::getsetdef_from_member<&_c2py_cls_2::Sperp_tau, _c2py_cls_2>("Sperp_tau", _c2py_doc_member_58),

@@ -70,8 +70,10 @@ namespace triqs_ctseg {
     if (wdata.has_Delta) {
       if (p.move_insert_segment) CTQMC.add_move(moves::insert_segment{wdata, config, CTQMC.get_rng()}, "insert");
       if (p.move_remove_segment) CTQMC.add_move(moves::remove_segment{wdata, config, CTQMC.get_rng()}, "remove");
-      if (p.move_double_insert_segment) CTQMC.add_move(moves::double_insert_segment{wdata, config, CTQMC.get_rng()}, "double insert");
-      if (p.move_double_remove_segment) CTQMC.add_move(moves::double_remove_segment{wdata, config, CTQMC.get_rng()}, "double remove");
+      if (p.move_double_insert_segment)
+        CTQMC.add_move(moves::double_insert_segment{wdata, config, CTQMC.get_rng()}, "double insert");
+      if (p.move_double_remove_segment)
+        CTQMC.add_move(moves::double_remove_segment{wdata, config, CTQMC.get_rng()}, "double remove");
       if (p.move_move_segment) CTQMC.add_move(moves::move_segment{wdata, config, CTQMC.get_rng()}, "move");
       if (p.move_split_segment) CTQMC.add_move(moves::split_segment{wdata, config, CTQMC.get_rng()}, "split");
       if (p.move_regroup_segment) CTQMC.add_move(moves::regroup_segment{wdata, config, CTQMC.get_rng()}, "regroup");
@@ -98,7 +100,8 @@ namespace triqs_ctseg {
     }
 
     // Initialize measurements
-    if (p.measure_G_tau) CTQMC.add_measure(measures::G_F_tau{p, wdata, config, results}, "G(tau)/F(tau)");
+    if (p.measure_G_tau or p.measure_F_tau or p.measure_G_l or p.measure_F_l)
+      CTQMC.add_measure(measures::G_F_tau{p, wdata, config, results}, "G/F tau/Legendre");
     if (p.measure_densities) CTQMC.add_measure(measures::densities{p, wdata, config, results}, "Densities");
     if (p.measure_average_sign) CTQMC.add_measure(measures::average_sign{p, wdata, config, results}, "Average Sign");
     if (p.measure_nn_static) CTQMC.add_measure(measures::nn_static{p, wdata, config, results}, "<nn>");
@@ -122,7 +125,7 @@ namespace triqs_ctseg {
     if (p.measure_density_matrix) CTQMC.add_measure(measures::state_hist{p, wdata, config, results}, "Density matrix");
     if (p.measure_dyn_corr and wdata.has_Dt)
       CTQMC.add_measure(measures::dyn_corr{p, wdata, config, results}, "Retarded static correlations");
-    if (p.measure_g2w || p.measure_g3w) 
+    if (p.measure_g2w || p.measure_g3w)
       CTQMC.add_measure(measures::four_point{p, wdata, config, results}, "Four-point correlation function");
     if (p.visualize_config) CTQMC.add_measure(measures::visualize_config{config}, "Visualizing configurations");
 
