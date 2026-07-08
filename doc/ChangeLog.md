@@ -1,5 +1,10 @@
 # Changelog
 
+## Unstable
+
+### General
+* Weight the state histogram and transverse spin correlation with the Monte-Carlo sign.
+
 ## Version 4.0.1
 
 ctseg version 4.0.1 is a patch release that pins the c2py build dependency to
