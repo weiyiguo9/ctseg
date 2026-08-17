@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import triqs.utility.mpi as mpi
-from triqs.gfs import MeshImTime, Gf, Block2Gf
+from triqs.gfs import MeshImTime, MeshLegendre, Gf, Block2Gf
 from triqs.operators import n
 
 from triqs_ctseg.postprocessing import (
@@ -24,6 +24,9 @@ from triqs_ctseg.postprocessing import (
     _chi_xx_tau_from_solver,
     _jperp_sigma1_components_from_tau,
     _jperp_sigma1_oriented_components_from_tau,
+    _f_legendre_discontinuity_target,
+    _enforce_legendre_discontinuity,
+    _legendre_discontinuity,
     compute_sigma_first_moment,
     extract_u_tensor_from_h_int,
     check_spectrum,
@@ -169,34 +172,53 @@ def test_check_spectrum_rejects_non_square():
     raise AssertionError("check_spectrum should have raised for non-square input")
 
 
-def test_state_hist_observables_and_static_moments():
-    class Results:
-        state_hist = np.array([0.1, 0.2, 0.3, 0.4])
-        densities = None
-        nn_static = None
+def _random_legendre_gf():
+    g_l = Gf(
+        mesh=MeshLegendre(beta=10.0, statistic="Fermion", max_n=8),
+        target_shape=(2, 2),
+    )
+    rng = np.random.default_rng(12345)
+    g_l.data[:] = rng.normal(size=g_l.data.shape) + 1j * rng.normal(size=g_l.data.shape)
+    return g_l
 
-    class Solver:
-        gf_struct = [('up', 1), ('down', 1)]
-        results = Results()
-        h_int = 2.0 * n('up', 0) * n('down', 0)
-        h_loc0_mat = [np.array([[0.25]]), np.array([[-0.5]])]
-        D0_tau = None
 
-    n_avg, nn_avg = _density_observables_from_state_hist(Solver)
-    np.testing.assert_allclose(n_avg, [0.6, 0.7])
-    np.testing.assert_allclose(nn_avg, [[0.6, 0.4], [0.4, 0.7]])
+def test_complex_legendre_discontinuity_enforcement():
+    g_l = _random_legendre_gf()
+    target = np.array([[1.0, 0.2j], [-0.2j, 1.0]], dtype=complex)
 
-    moments = _assemble_density_tail_moments(Solver)
-    np.testing.assert_allclose(moments['Sigma_moments']['up'][0], [[1.4]])
-    np.testing.assert_allclose(moments['Sigma_moments']['down'][0], [[1.2]])
-    # Sigma_1^up = U^2 Var(n_down), Sigma_1^down = U^2 Var(n_up)
-    np.testing.assert_allclose(moments['Sigma_moments']['up'][1], [[4.0 * 0.7 * 0.3]])
-    np.testing.assert_allclose(moments['Sigma_moments']['down'][1], [[4.0 * 0.6 * 0.4]])
-    np.testing.assert_allclose(moments['G_moments']['up'][2], [[1.65]])
-    np.testing.assert_allclose(moments['G_moments']['down'][2], [[0.7]])
+    _enforce_legendre_discontinuity(g_l, target)
+
+    np.testing.assert_allclose(_legendre_discontinuity(g_l), target, atol=1e-13)
+
+
+def test_f_legendre_discontinuity_uses_tail_moment_when_available():
+    f_l = _random_legendre_gf()
+    measured = _legendre_discontinuity(f_l)
+    target = np.array([[2.0, 0.3j], [-0.3j, -1.0]], dtype=complex)
+    solver = type('Solver', (), {
+        'F_tail_moments': {'up': np.array([np.zeros((2, 2)), target])},
+    })()
+
+    selected = _f_legendre_discontinuity_target(solver, 'up', f_l)
+
+    np.testing.assert_allclose(selected, target)
+    assert not np.allclose(selected, measured)
+
+
+def test_f_legendre_discontinuity_falls_back_to_measurement():
+    f_l = _random_legendre_gf()
+    measured = _legendre_discontinuity(f_l)
+
+    no_attribute_solver = type('Solver', (), {})()
+    missing_block_solver = type('Solver', (), {
+        'F_tail_moments': {'down': np.zeros((2, 2, 2))},
+    })()
+
     np.testing.assert_allclose(
-        moments['F_tail_moments']['up'][2],
-        [[1.4 * 1.65 + 4.0 * 0.7 * 0.3]],
+        _f_legendre_discontinuity_target(no_attribute_solver, 'up', f_l), measured
+    )
+    np.testing.assert_allclose(
+        _f_legendre_discontinuity_target(missing_block_solver, 'up', f_l), measured
     )
 
 
@@ -212,7 +234,6 @@ def _fock_annihilators(n_color):
                 c[state ^ (1 << a), state] = sign
         cs.append(c)
     return cs
-
 
 def test_compute_sigma_first_moment_vs_operator_algebra():
     # Kanamori density-density, 2 orbitals, one 2x2 block per spin.
@@ -281,6 +302,36 @@ def test_compute_sigma_first_moment_vs_operator_algebra():
     solver.results.state_hist = prob
     solver.Jperp_tau.data[1] = 0.1
     assert compute_sigma_first_moment(solver) is None
+
+def test_state_hist_observables_and_static_moments():
+    class Results:
+        state_hist = np.array([0.1, 0.2, 0.3, 0.4])
+        densities = None
+        nn_static = None
+
+    class Solver:
+        gf_struct = [('up', 1), ('down', 1)]
+        results = Results()
+        h_int = 2.0 * n('up', 0) * n('down', 0)
+        h_loc0_mat = [np.array([[0.25]]), np.array([[-0.5]])]
+        D0_tau = None
+
+    n_avg, nn_avg = _density_observables_from_state_hist(Solver)
+    np.testing.assert_allclose(n_avg, [0.6, 0.7])
+    np.testing.assert_allclose(nn_avg, [[0.6, 0.4], [0.4, 0.7]])
+
+    moments = _assemble_density_tail_moments(Solver)
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][0], [[1.4]])
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][0], [[1.2]])
+    # Sigma_1^up = U^2 Var(n_down), Sigma_1^down = U^2 Var(n_up)
+    np.testing.assert_allclose(moments['Sigma_moments']['up'][1], [[4.0 * 0.7 * 0.3]])
+    np.testing.assert_allclose(moments['Sigma_moments']['down'][1], [[4.0 * 0.6 * 0.4]])
+    np.testing.assert_allclose(moments['G_moments']['up'][2], [[1.65]])
+    np.testing.assert_allclose(moments['G_moments']['down'][2], [[0.7]])
+    np.testing.assert_allclose(
+        moments['F_tail_moments']['up'][2],
+        [[1.4 * 1.65 + 4.0 * 0.7 * 0.3]],
+    )
 
 
 def _half_filled_hubbard_atom_hist(beta, U):
@@ -607,6 +658,9 @@ if mpi.is_master_node():
     test_check_spectrum_no_truncation_keeps_matrix()
     test_check_spectrum_truncation_drops_large_eigenvalues()
     test_check_spectrum_rejects_non_square()
+    test_complex_legendre_discontinuity_enforcement()
+    test_f_legendre_discontinuity_uses_tail_moment_when_available()
+    test_f_legendre_discontinuity_falls_back_to_measurement()
     test_compute_sigma_first_moment_vs_operator_algebra()
     test_state_hist_observables_and_static_moments()
     test_hubbard_atom_static_tail_moments_at_half_filling()
