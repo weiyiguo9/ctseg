@@ -363,13 +363,14 @@ def _trapezoid_uniform(values, beta):
 def _periodic_tau_convolution_zero(left, middle, right, beta):
     """Approximate int dt dt' left(t) middle(t-t') right(t') / beta.
 
-    The bosonic tau meshes include both 0 and beta. For the circular
-    convolution use the half-open grid [0, beta) to avoid double-counting the
-    endpoint.
+    On the half-open circular grid, the zero bin contains half of each
+    endpoint. Their one-sided values need not agree for oriented correlators.
     """
-    left = np.asarray(left[:-1], dtype=float)
-    middle = np.asarray(middle[:-1], dtype=float)
-    right = np.asarray(right[:-1], dtype=float)
+    def fold(values):
+        values = np.asarray(values, dtype=float)
+        return np.concatenate(([0.5 * (values[0] + values[-1])], values[1:-1]))
+
+    left, middle, right = map(fold, (left, middle, right))
     if not (left.size == middle.size == right.size):
         raise ValueError("Convolution inputs must live on the same tau mesh.")
     n_tau = left.size

@@ -519,6 +519,14 @@ def test_jperp_sigma1_oriented_reduces_to_nonpolarized():
     np.testing.assert_allclose(oriented['down']['total'], nonpolarized['total'])
 
 
+def test_oriented_convolution_weights_both_one_sided_limits():
+    # K at separations 0 and 1 is (2.5, 2). Both oriented histograms
+    # must contribute (6+2)/2 at the periodic node, not just chi(0+).
+    chi = np.array([6., 1., 2.])
+    result = _jperp_sigma1_oriented_components_from_tau([1., 2., 1.], chi, chi[::-1], 2., 0.)
+    np.testing.assert_allclose([result[s]['J_chi_J'] for s in ('up', 'down')], [12., 12.], rtol=0, atol=1e-13)
+
+
 def test_jperp_jordan_wigner_mixed_coefficient():
     eye2 = np.eye(2)
     c0 = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -669,6 +677,7 @@ if mpi.is_master_node():
     test_chi_xx_does_not_infer_transverse_from_anisotropic_nn_tau()
     test_jperp_sigma1_nonpolarized_assembly_coefficients()
     test_jperp_sigma1_oriented_reduces_to_nonpolarized()
+    test_oriented_convolution_weights_both_one_sided_limits()
     test_jperp_jordan_wigner_mixed_coefficient()
     test_density_tail_moments_include_jperp()
     test_density_tail_moments_include_polarized_jperp()
