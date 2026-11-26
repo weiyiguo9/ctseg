@@ -156,6 +156,7 @@ def _run_solver(Delta_iw, h_loc0, h_int, D0_iw, solve_density_only, **params):
         solve_density_only=solve_density_only, **params,
     )
     _prepare_delta_tau(S, Delta_iw, D0_iw, n_tau)
+    solver_params.setdefault('measure_Jperp_tail', not solve_density_only and post_proc_params['use_tail_moments'])
     if (not solve_density_only
             and post_proc_params.get('use_tail_moments', True)
             and _gf_is_nonzero(D0_iw)):

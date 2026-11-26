@@ -83,10 +83,24 @@ was measured and both retarded interactions are zero. For non-zero ``D0_tau``,
 ``Sigma_0`` includes the retarded Hartree shift and ``Sigma_1`` uses
 ``dyn_phi_n``/``dyn_phi_phi`` when they were measured. If ``D0_tau`` is non-zero but the dynamic
 correlations are absent, postprocessing keeps the exact ``Sigma_0`` and ``G_2`` moments and emits a
-warning before skipping analytic ``Sigma_1``/``F_2``. Transverse ``Jperp_tau`` contributions are
-included for a single up/down orbital when the required spin-correlation inputs are available. In the
-spin-polarized case this requires the oriented transverse-spin measurement
-``measure_Sperp_asym_tau=True``.
+warning before skipping analytic ``Sigma_1``/``F_2``.
+
+For a single up/down orbital with a nonzero transverse kernel, ``measure_Jperp_tail=True``
+(the default in ``Solver.solve``) measures the two tail integrals directly, including in a magnetic
+field. Neither transverse spin histogram nor ``n_tau_chi2`` is needed. With the real, even physical
+kernel :math:`J=J_\perp` and :math:`K(d)=\beta^{-1}\int_0^\beta dt\,J(t)J(t-d)`, the results are
+
+.. math::
+
+    A = -\frac{\sum_C s_C k_C}{\beta\sum_C s_C},\qquad
+    B = -\frac{\sum_C s_C \sum_{\ell\in C} K(d_\ell)/J(d_\ell)}{\beta\sum_C s_C}.
+
+``results.jperp_int_J_chi_xx`` stores :math:`A`; ``results.jperp_J_chi_xx_J`` stores :math:`B`.
+The kernel is precomputed on the input ``Jperp_tau`` mesh. Both it and :math:`J` are interpolated
+at the actual line separation :math:`d_\ell` before taking their ratio.
+The transverse correction is :math:`[J(0)+B]/2-2UA`. If direct results are absent,
+postprocessing uses measured spin histograms as before (oriented histograms are required for a
+polarized impurity).
 
 Density
 *******

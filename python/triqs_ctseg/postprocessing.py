@@ -391,6 +391,10 @@ def _jperp_sigma1_components_from_tau(jperp_tau, chi_xx_tau, beta, U):
     j_chi = _trapezoid_uniform(jperp_tau * chi_xx_tau, beta)
     j_chi_j = _periodic_tau_convolution_zero(jperp_tau, chi_xx_tau, jperp_tau, beta)
 
+    return _jperp_sigma1_components(j_tau0, j_chi, j_chi_j, U)
+
+
+def _jperp_sigma1_components(j_tau0, j_chi, j_chi_j, U):
     pure = 0.5 * (j_tau0 + j_chi_j)
     mixed = -2.0 * U * j_chi
     return {
@@ -476,11 +480,26 @@ def _assemble_jperp_sigma1(solver, U):
         return None
 
     up, down = spin_colors
-    is_unpolarized = _is_unpolarized_single_orbital(solver, up, down)
-
     jperp_tau = np.asarray(solver.Jperp_tau.data[:, 0, 0].real)
     U_spin = 0.5 * (U[up, down] + U[down, up])
 
+    a = getattr(solver.results, 'jperp_int_J_chi_xx', None)
+    b = getattr(solver.results, 'jperp_J_chi_xx_J', None)
+    if a is not None and b is not None:
+        j_tau0 = 0.5 * (jperp_tau[0] + jperp_tau[-1])
+        components = _jperp_sigma1_components(j_tau0, a, b, U_spin)
+        # The physical transverse kernel is even. Each oriented integral
+        # is twice its xx counterpart, even for a polarized impurity.
+        oriented = {key: components[key] for key in ('pure', 'mixed', 'total', 'J_tau0')}
+        oriented.update(int_J_chi=2*a, J_chi_J=2*b)
+        components.update(mode='direct', up=oriented, down=oriented,
+                          Sminus_Splus=oriented, Splus_Sminus=oriented,
+                          total_up=components['total'], total_down=components['total'])
+        correction = np.zeros(U.shape[0], dtype=float)
+        correction[[up, down]] = components['total']
+        return correction, components
+
+    is_unpolarized = _is_unpolarized_single_orbital(solver, up, down)
     oriented_tau = _oriented_sperp_tau_from_solver(solver)
     if oriented_tau is not None:
         chi_minus_plus_tau, chi_plus_minus_tau = oriented_tau
