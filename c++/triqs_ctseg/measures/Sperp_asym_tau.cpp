@@ -31,8 +31,8 @@ namespace triqs_ctseg::measures {
       auto dtau_sp_sm = double(line.tau_Splus - line.tau_Sminus);
       // Jperp lines carry a -J/2 expansion weight; the oriented estimator is
       // four times the corresponding S_x S_x contribution.
-      sm_sp_tau[closest_mesh_pt(dtau_sm_sp)] += 2.0 / (real(wdata.Jperp(dtau_sm_sp)(0, 0)));
-      sp_sm_tau[closest_mesh_pt(dtau_sp_sm)] += 2.0 / (real(wdata.Jperp(dtau_sp_sm)(0, 0)));
+      sm_sp_tau[closest_mesh_pt(dtau_sm_sp)] += s * 2.0 / (real(wdata.Jperp(dtau_sm_sp)(0, 0)));
+      sp_sm_tau[closest_mesh_pt(dtau_sp_sm)] += s * 2.0 / (real(wdata.Jperp(dtau_sp_sm)(0, 0)));
     }
   }
 
