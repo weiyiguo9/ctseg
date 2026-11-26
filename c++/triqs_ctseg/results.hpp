@@ -43,6 +43,12 @@ namespace triqs_ctseg {
     /// Oriented transverse spin correlation \f$ \langle S^+(\tau) S^-(0) \rangle \f$.
     std::optional<gf<imtime>> Splus_Sminus_tau;
 
+    /// Signed line estimate of the integral of Jperp times chi_xx.
+    std::optional<double> jperp_int_J_chi_xx;
+
+    /// Signed line estimate of the equal-time Jperp-chi_xx-Jperp convolution (including 1/beta).
+    std::optional<double> jperp_J_chi_xx_J;
+
     /// Density-density static correlation function \f$ \langle n_a(0) n_b(0) \rangle \f$.
     std::optional<std::map<std::pair<std::string, std::string>, nda::matrix<double>>> nn_static;
 

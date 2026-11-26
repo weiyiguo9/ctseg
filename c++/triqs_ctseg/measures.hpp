@@ -11,6 +11,7 @@
 #include "./measures/nn_nu_dlr.hpp"
 #include "./measures/Sperp_tau.hpp"
 #include "./measures/Sperp_asym_tau.hpp"
+#include "./measures/Jperp_tail.hpp"
 #include "./measures/nn_static.hpp"
 #include "./measures/densities.hpp"
 #include "./measures/average_sign.hpp"

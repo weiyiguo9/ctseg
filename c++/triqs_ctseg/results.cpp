@@ -23,6 +23,8 @@ namespace triqs_ctseg {
     h5_write(grp, "Sperp_tau", c.Sperp_tau);
     h5_write(grp, "Sminus_Splus_tau", c.Sminus_Splus_tau);
     h5_write(grp, "Splus_Sminus_tau", c.Splus_Sminus_tau);
+    h5_write(grp, "jperp_int_J_chi_xx", c.jperp_int_J_chi_xx);
+    h5_write(grp, "jperp_J_chi_xx_J", c.jperp_J_chi_xx_J);
     h5_write(grp, "nn_static", c.nn_static);
     h5_write(grp, "densities", c.densities);
     h5_write(grp, "pert_order_Delta", c.pert_order_Delta);
@@ -52,6 +54,8 @@ namespace triqs_ctseg {
     h5_read(grp, "Sperp_tau", c.Sperp_tau);
     h5::try_read(grp, "Sminus_Splus_tau", c.Sminus_Splus_tau);
     h5::try_read(grp, "Splus_Sminus_tau", c.Splus_Sminus_tau);
+    h5::try_read(grp, "jperp_int_J_chi_xx", c.jperp_int_J_chi_xx);
+    h5::try_read(grp, "jperp_J_chi_xx_J", c.jperp_J_chi_xx_J);
     h5_read(grp, "nn_static", c.nn_static);
     h5_read(grp, "densities", c.densities);
     h5_read(grp, "pert_order_Delta", c.pert_order_Delta);

@@ -109,6 +109,12 @@ namespace triqs_ctseg {
     if (p.measure_Sperp_tau) CTQMC.add_measure(measures::Sperp_tau{p, wdata, config, results}, "<S_x(tau)S_x(0)>");
     if (p.measure_Sperp_asym_tau)
       CTQMC.add_measure(measures::Sperp_asym_tau{p, wdata, config, results}, "<S-(tau)S+(0)>/<S+(tau)S-(0)>");
+    if (p.measure_Jperp_tail and wdata.has_Jperp)
+      CTQMC.add_measure(measures::Jperp_tail{wdata.Jperp, config, results}, "Jperp tail integrals");
+    else {
+      results.jperp_int_J_chi_xx.reset();
+      results.jperp_J_chi_xx_J.reset();
+    }
     if (p.measure_pert_order) {
       if (wdata.has_Delta) {
         CTQMC.add_measure(measures::pert_order{[&]() { return config.Delta_order(); }, results.pert_order_Delta,

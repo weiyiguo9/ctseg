@@ -163,6 +163,9 @@ namespace triqs_ctseg {
     /// \f$ \langle S^+(\tau) S^-(0) \rangle \f$.
     bool measure_Sperp_asym_tau = false;
 
+    /// Measure the two transverse tail integrals directly on Jperp lines.
+    bool measure_Jperp_tail = true;
+
     /// Whether to measure the occupation-basis state histogram.
     bool measure_state_hist = false;
 
